@@ -1,180 +1,205 @@
-import React from 'react';
-import { View, Text, FlatList, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import Icon from 'react-native-vector-icons/FontAwesome';
-import { LineChart, BarChart } from 'react-native-chart-kit';  
-import { Dimensions } from 'react-native';
+import React, { useEffect, useState } from "react";
+import { View, Text, Dimensions, StyleSheet, ActivityIndicator } from "react-native";
+import { LineChart } from "react-native-chart-kit";
+import { Card } from "react-native-paper";
+import axios from "axios";
+import { API_URL } from '../../config';
 
-const transactionsData = [
-  {
-    id: 1,
-    name: 'Ali',
-    amount: -50,
-    time: '2025-02-01 10:30',
-    initialPrice: 1000,
-    finalPrice: 950,
-    type: 'Dépense',
-  },
-  {
-    id: 2,
-    name: 'Sara',
-    amount: 100,
-    time: '2025-02-01 12:15',
-    initialPrice: 950,
-    finalPrice: 1050,
-    type: 'Revenu',
-  },
-  {
-    id: 3,
-    name: 'Ilyas',
-    amount: -30,
-    time: '2025-02-01 14:00',
-    initialPrice: 1050,
-    finalPrice: 1020,
-    type: 'Dépense',
-  },
-  {
-    id: 4,
-    name: 'Khalid',
-    amount: 200,
-    time: '2025-02-01 16:30',
-    initialPrice: 1020,
-    finalPrice: 1220,
-    type: 'Revenu',
-  },
-];
+const PortfolioScreen = ({ route }) => {
+  const { groupId } = route.params || {}; 
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-const Dashboard = () => {
-  // Calcul de la répartition des revenus et dépenses
-  const totalRevenu = transactionsData.filter(item => item.amount > 0).reduce((acc, item) => acc + item.amount, 0);
-  const totalDepense = transactionsData.filter(item => item.amount < 0).reduce((acc, item) => acc + item.amount, 0);
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/groups/${groupId}/info`);
+        setData(response.data);
+        console.log("Données reçues :", response.data);
+      } catch (err) {
+        setError(err.message);
+        console.error("Erreur lors de la récupération des données :", err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const chartData = {
-    labels: ['Revenus', 'Dépenses'],
-    datasets: [
-      {
-        data: [totalRevenu, Math.abs(totalDepense)],
-      },
-    ],
-  };
+    if (groupId) {
+      fetchData();
+    }
+  }, [groupId]);
 
-  const screenWidth = Dimensions.get('window').width;
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>Erreur : {error}</Text>
+      </View>
+    );
+  }
+
+  if (!data || !data.transactions || data.transactions.length === 0) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.noData}>Aucune transaction trouvée.</Text>
+      </View>
+    );
+  }
+
+  // Extraction des transactions pour le graphe
+  const transactionAmounts = data.transactions.map((t) => t.amount);
+  const transactionDates = data.transactions.map((t) => {
+    const date = new Date(t.date);
+    return `${date.getDate()}/${date.getMonth() + 1}`;
+  });
+  const transactionsByDate = {};
+
+data.transactions.forEach((transaction) => {
+  const date = new Date(transaction.date).toISOString().split("T")[0]; // Extraire la date sans l'heure
+
+  if (!transactionsByDate[date]) {
+    transactionsByDate[date] = { total: 0, count: 0 };
+  }
+
+  transactionsByDate[date].total += transaction.amount;
+  transactionsByDate[date].count += 1;
+});
+
+// Calcul du prix moyen par jour
+const dailyAverages = Object.keys(transactionsByDate).map((date) => ({
+  date,
+  average: transactionsByDate[date].total / transactionsByDate[date].count,
+}));
+
+// Calcul du total des transactions
+const totalTransactions = data.transactions.reduce((sum, transaction) => sum + transaction.amount, 0);
+
+// Calcul du pourcentage consommé
+const percentageConsumed = ((totalTransactions / data.initialPrice) * 100).toFixed(2);
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Transactions Récentes</Text>
-        <FlatList
-          data={transactionsData}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => (
-            <View style={styles.transactionItem}>
-              <Text style={styles.transactionText}>
-                <Text style={styles.bold}>{item.name}</Text> a effectué une{' '}
-                <Text style={item.amount < 0 ? styles.expense : styles.income}>
-                  {item.type} de {item.amount} USD
-                </Text>{' '}
-                le {item.time}
-              </Text>
-              <Text style={styles.transactionText}>
-                Prix Initial : {item.initialPrice} USD | Prix Final : {item.finalPrice} USD
-              </Text>
-            </View>
-          )}
-        />
-      </View>
+    <View style={styles.container}>
+      <Text style={styles.groupName}>Détails du groupe</Text>
 
-      {/* Ajout du graphique */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Répartition des Transactions</Text>
-        <BarChart
-          data={chartData}
-          width={screenWidth - 40}
-          height={220}
-          chartConfig={{
-            backgroundColor: '#fff',
-            backgroundGradientFrom: '#fff',
-            backgroundGradientTo: '#fff',
-            decimalPlaces: 2,
-            color: (opacity = 1) => `rgba(0, 0, 255, ${opacity})`,
-            labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-            style: {
-              borderRadius: 16,
+      <LineChart
+        data={{
+          labels: transactionDates,
+          datasets: [
+            {
+              data: transactionAmounts,
+              color: (opacity = 1) => `rgba(0, 122, 255, ${opacity})`,
+              strokeWidth: 2,
             },
-            propsForDots: {
-              r: '6',
-              strokeWidth: '2',
-              stroke: '#ffa726',
-            },
-          }}
-          style={{ marginVertical: 10 }}
-        />
-      </View>
+          ],
+        }}
+        width={Dimensions.get("window").width - 30}
+        height={220}
+        chartConfig={{
+          backgroundGradientFrom: "#fff",
+          backgroundGradientTo: "#fff",
+          decimalPlaces: 2,
+          color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+          labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+          style: { borderRadius: 10 },
+          propsForDots: { r: "5", strokeWidth: "2", stroke: "#007AFF" },
+        }}
+        bezier
+        style={styles.chart}
+      />
 
-      <TouchableOpacity
-        style={styles.addButton}
-        onPress={() => alert('Ajouter une nouvelle transaction')}
-      >
-        <Icon name="plus" size={30} color="#fff" />
-        <Text style={styles.addButtonText}>Ajouter une Transaction</Text>
-      </TouchableOpacity>
-    </ScrollView>
+      {/* Portefeuille */}
+      <View style={styles.portfolio}>
+        <Text style={styles.portfolioTitle}>Votre Portefeuille</Text>
+        <View style={styles.row}>
+          <Card style={styles.card}>
+          <Text style={styles.label}>Prix Initial</Text>
+<Text style={styles.value}>{data?.initialPrice || "N/A"} €</Text>
+
+          </Card>
+          <Card style={styles.card}>
+          <Text style={styles.label}>Prix Initial</Text>
+<Text style={styles.value}>{data?.recentPrice || "N/A"} €</Text>
+
+          </Card>
+        </View>
+        <View style={styles.row}>
+   <Card style={styles.card}>
+    <Text style={styles.label}>Nombre de Transactions</Text>
+    <Text style={styles.value}>{data?.transactions.length || 0}</Text>
+  </Card>
+
+
+          <Card style={styles.card}>
+            <Text style={styles.label}>Gain/Pertes</Text>
+            <Text style={[styles.value, { color: "red" }]}>
+            ▼{percentageConsumed ? `${percentageConsumed} %` : "N/A"}
+            </Text>
+          </Card>
+        </View>
+      </View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 10,
-    backgroundColor: '#f5f5f5',
-  },
-  card: {
-    backgroundColor: '#fff',
-    marginBottom: 15,
+    backgroundColor: "#F8F9FA",
     padding: 15,
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 5,
   },
-  cardTitle: {
+  groupName: {
+    fontSize: 24,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginVertical: 20,
+    color: "#333",
+    top: 50,
+  },
+  chart: {
+    marginVertical: 10,
+    borderRadius: 10,
+    marginTop: 10,
+    top: 50,
+  },
+  portfolio: {
+    backgroundColor: "#F1F3F6",
+    padding: 15,
+    borderRadius: 10,
+    marginTop: 10,
+  },
+  portfolioTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 10,
   },
-  transactionItem: {
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
-  transactionText: {
-    fontSize: 16,
-    color: '#333',
-  },
-  bold: {
-    fontWeight: 'bold',
-  },
-  expense: {
-    color: 'red',
-  },
-  income: {
-    color: 'green',
-  },
-  addButton: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#4CAF50',
+  card: {
+    flex: 1,
     padding: 15,
-    borderRadius: 50,
-    marginTop: 20,
+    margin: 5,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    elevation: 2,
   },
-  addButtonText: {
-    marginLeft: 10,
+  label: {
+    fontSize: 14,
+    color: "#888",
+  },
+  value: {
     fontSize: 16,
-    color: '#fff',
+    fontWeight: "bold",
   },
 });
 
-export default Dashboard;
+export default PortfolioScreen;

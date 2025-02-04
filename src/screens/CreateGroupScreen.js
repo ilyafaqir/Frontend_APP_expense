@@ -7,6 +7,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { useNavigation } from '@react-navigation/native';
 import { API_URL } from '../../config';
+//import QRCode from 'react-native-qrcode-svg';
+
 import QRCode from 'react-native-qrcode-svg';
 
 const CreateGroupScreen = () => {
@@ -188,7 +190,7 @@ const CreateGroupScreen = () => {
       if (response.status === 200) {
         Alert.alert('Succès', 'Vous avez rejoint le groupe avec succès.');
         setJoinGroupId('');
-        fetchGroups(userId);  
+        fetchGroups(userId); // Mise à jour des groupes
       } else {
         Alert.alert('Erreur', 'Une erreur est survenue lors de la tentative de rejoindre le groupe.');
       }
@@ -196,7 +198,7 @@ const CreateGroupScreen = () => {
       if (error.response && error.response.data) {
         console.log('Détails de la réponse:', error.response.data);
         if (error.response.status === 400) {
-         
+          // Vérifie si le message d'erreur contient cette information
           if (error.response.data.message === 'L\'utilisateur est déjà membre de ce groupe.') {
             Alert.alert('Erreur', 'Vous êtes déjà membre de ce groupe.');
           } else {
